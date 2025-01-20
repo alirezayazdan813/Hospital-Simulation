@@ -71,20 +71,20 @@ set_seed(776)
 
 print('hello')
 
-simulation_time = 60 * 24 * 10
+simulation_time = 60 * 24 * 30
 event_log, patients, table = simulation(simulation_time)
 
-print(type(event_log))
+# print(type(event_log))
 
-print('hello again')
+# print('hello again')
 # Print the event log
 '''for event in event_log:
     print('')
     # print(type(event))
     print(f"Time: {event['time']}, Event Type: {event['event_type']}, State Snapshot: {event['state_snapshot']}")'''
 
-print('')
-print('hello again2')
+# print('')
+# print('hello again2')
 # print_all_patients(patients)
 
 print('')
@@ -134,15 +134,20 @@ print('hello-kpi-4')
 print('')
 print('hello-kpi-5')
 emergency_utilization = calculate_bed_utilization(patients, simulation_time, bed_capacity=10, section_name="emergency")
-print('emergency_utilization', ' : ', emergency_utilization)
+print('emergency_utilization  ', ' : ', emergency_utilization)
 
 lab_utilization = calculate_bed_utilization(patients, simulation_time, bed_capacity=3, section_name="lab")
-print('lab_utilization', ' : ', lab_utilization)
+print('lab_utilization        ', ' : ', lab_utilization)
 
 pre_surgery_utilization = calculate_bed_utilization(patients,
                                                     simulation_time, bed_capacity=25, section_name="pre_surgery")
 print('pre_surgery_utilization', ' : ', pre_surgery_utilization)
 
+surgery_utilization = calculate_bed_utilization(patients, simulation_time, bed_capacity=50, section_name="surgery")
+print('surgery_utilization    ', ' : ', surgery_utilization)
+
+icu_utilization = calculate_bed_utilization(patients, simulation_time, bed_capacity=10, section_name="icu")
+print('icu_utilization        ', ' : ', icu_utilization)
 
 print('bye bye')
 print(len(event_log[-1]["state_snapshot"]["surgery_list"]))

@@ -267,6 +267,53 @@ def calculate_bed_utilization(patients, simulation_time, bed_capacity, section_n
                 # print(f'entry_time : {entry_time}')
                 # print(f'end_time : {end_time}')
 
+    elif section_name == "surgery":
+        # Calculate total bed usage time for the given section
+        counter = 0
+        not_done_counter = 0
+        for patient in patients.values():
+            entry_time = getattr(patient, f"{section_name}_entry_time", None)
+            if patient.icu_entry_time != 0:
+                end_time = getattr(patient, "icu_entry_time", None)
+            elif patient.ccu_entry_time != 0:
+                end_time = getattr(patient, "ccu_entry_time", None)
+            elif patient.ward_entry_time != 0:
+                end_time = getattr(patient, "ward_entry_time", None)
+            else:
+                end_time = 0
+
+            if entry_time != 0:
+                if end_time != 0:  # Ensure both entry and exit times are available
+                    total_bed_time += end_time - entry_time
+                elif end_time == 0:
+                    total_bed_time += simulation_time - entry_time
+                    not_done_counter += 1
+                counter += 1
+                # print(counter)
+                # print(f'entry_time : {entry_time}')
+                # print(f'end_time : {end_time}')
+                # print(f"not-done-in-surgery counter : {not_done_counter}")
+                # print(f"not-done-in-surgery counter : {not_done_counter}")
+
+    elif section_name == "icu":
+        # Calculate total bed usage time for the given section
+        counter = 0
+        for patient in patients.values():
+            entry_time = getattr(patient, f"{section_name}_entry_time", None)
+            if patient.ward_entry_time != 0:
+                end_time = getattr(patient, "ward_entry_time", None)
+            elif patient.re_surgeries > 0:
+                end_time = getattr(patient, "surgery_entry_time", None)
+            else:
+                end_time = 0
+
+            if entry_time != 0:
+                if end_time != 0:  # Ensure both entry and exit times are available
+                    total_bed_time += end_time - entry_time
+                elif end_time == 0:
+                    # total_bed_time += simulation_time - entry_time
+                    pass
+
     # Calculate bed utilization
     return (total_bed_time * 100) / (simulation_time * bed_capacity)
 

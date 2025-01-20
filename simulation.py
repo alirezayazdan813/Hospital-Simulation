@@ -27,6 +27,7 @@ def starting_state():
         "ward_patients": 0,  # (W)
         "ccu_patients": 0,  # Number of patients in CCU (C)
         "icu_patients": 0,  # Number of patients in ICU (I)
+        "finished_patients": 0,  # (F)
 
         # Capacities
         "emergency_queue_capacity": 10,
@@ -125,6 +126,12 @@ def simulation(simulation_time):
             surgery_done(state, future_event_list, current_time, patient)
         elif current_event['event_type'] == 'surgery_free':
             surgery_free(state, future_event_list, current_time)
+        elif current_event['event_type'] == 'icu_done':
+            icu_done(state, future_event_list, current_time, patient)
+        elif current_event['event_type'] == 'ccu_done':
+            ccu_done(state, future_event_list, current_time, patient)
+        elif current_event['event_type'] == 'ward_done':
+            ward_done(state, future_event_list, current_time, patient)
 
         # Add other event handlers here (e.g., Lab Free, Operating Room Ready)
 
@@ -449,7 +456,7 @@ def surgery_free(state, future_event_list, current_time):
                 pre_surgery_patient = state["pre_surgery_list"].pop(0)
                 patient_id = pre_surgery_patient["patient_id"]
                 afterward_patient = patients[patient_id]
-                process_icu(state, future_event_list, current_time, afterward_patient)
+                process_pre_surgery(state, future_event_list, current_time, afterward_patient)
         elif patient.current_state == "emergency":
             state["emergency_patients"] -= 1
 
@@ -457,15 +464,12 @@ def surgery_free(state, future_event_list, current_time):
                 emergency_patient = state["emergency_list"].pop(0)
                 patient_id = emergency_patient["patient_id"]
                 afterward_patient = patients[patient_id]
-                process_icu(state, future_event_list, current_time, afterward_patient)
+                process_emergency(state, future_event_list, current_time, afterward_patient)
         elif patient.current_state == "icu":
             state["icu_patients"] -= 1
 
             if len(state["icu_list"]) > 0:
-                icu_patient = state["icu_list"].pop(0)
-                patient_id = icu_patient["patient_id"]
-                afterward_patient = patients[patient_id]
-                process_icu(state, future_event_list, current_time, afterward_patient)
+                process_icu(state, future_event_list, current_time, patient)
         elif patient.current_state == "ccu":
             state["ccu_patients"] -= 1
 
@@ -516,15 +520,39 @@ def surgery_done(state, future_event_list, current_time, patient):
 
     # Determine the destination based on the surgery type (operation type)
     if patient.operation_type == "simple":  # OT=1
+        state["ward_list"].append({
+            "time": current_time,
+            "patient_id": patient.id,
+            "is_elective": patient.is_elective,
+        })
+        state["ward_list"].sort(key=lambda x: x["time"])
         process_ward(state, future_event_list, current_time, patient)
 
     elif patient.operation_type == "medium":  # OT=2
         r = random.random()
         if r < 0.7:
+            state["ward_list"].append({
+                "time": current_time,
+                "patient_id": patient.id,
+                "is_elective": patient.is_elective,
+            })
+            state["ward_list"].sort(key=lambda x: x["time"])
             process_ward(state, future_event_list, current_time, patient)
         elif r < 0.8:
+            state["icu_list"].append({
+                "time": current_time,
+                "patient_id": patient.id,
+                "is_elective": patient.is_elective,
+            })
+            state["icu_list"].sort(key=lambda x: x["time"])
             process_icu(state, future_event_list, current_time, patient)
         else:
+            state["ccu_list"].append({
+                "time": current_time,
+                "patient_id": patient.id,
+                "is_elective": patient.is_elective,
+            })
+            state["ccu_list"].sort(key=lambda x: x["time"])
             process_ccu(state, future_event_list, current_time, patient)
 
     elif patient.operation_type == "complex":  # OT=3, 4
@@ -535,8 +563,14 @@ def surgery_done(state, future_event_list, current_time, patient):
         else:
             r = random.random()
             if r < 0.75:  # not heart (OT = 3) icu
+                state["icu_list"].append({"time": current_time, "patient_id": patient.id,
+                                          "is_elective": patient.is_elective})
+                state["icu_list"].sort(key=lambda x: x["time"])
                 process_icu(state, future_event_list, current_time, patient)
             else:  # heart (OT = 4) ccu
+                state["ccu_list"].append({"time": current_time, "patient_id": patient.id,
+                                          "is_elective": patient.is_elective})
+                state["ccu_list"].sort(key=lambda x: x["time"])
                 process_ccu(state, future_event_list, current_time, patient)
 
     # Update statistics and schedule next events for operating room readiness
@@ -564,32 +598,33 @@ def icu_done(state, future_event_list, current_time, patient):
     print(f"\nICU Done event for patient {patient.id} at time {current_time}")
     patient.icu_end_time = current_time
 
-    # Decrement ICU patients
-    state["icu_patients"] -= 1
-    print(f"ICU count decreased. Current ICU count: {state['icu_patients']}")
-
-    # Check if the patient is critical (acute case)
-    if patient.is_critical:
-        print(f"Patient {patient.id} is critical.")
+    r = random.random()
+    if r < 0.01:
+        pass
+    else:
         if state["ward_patients"] < state["ward_capacity"]:
-            # Move to the ward
-            state["ward_patients"] += 1
+
+            print(f"Patient {patient.id} moved to ward from icu at time {current_time}.")
             patient.ward_entry_time = current_time
-            print(f"Patient {patient.id} moved to ward at time {current_time}.")
-            # Schedule ward discharge
-            S = generate_ward_duration()
+            state["icu_patients"] -= 1
+            state["ward_patients"] += 1
+            S = 60 * exponential(lambd=50)
             fel_maker(future_event_list, "ward_done", current_time, S, patient)
         else:
-            # Add to the ward queue
             state["ward_list"].append({
                 "time": current_time,
                 "patient_id": patient.id,
                 "is_elective": patient.is_elective,
             })
             state["ward_list"].sort(key=lambda x: x["time"])
-            print(f"Patient {patient.id} added to ward queue due to full ward capacity.")
+            print(f"Patient {patient.id} added to ward queue (in icu) due to full ward capacity.")
+
+    '''
+    # Check if the patient is critical (acute case)
+    if patient.is_critical:
+        pass
     else:
-        print(f"Patient {patient.id} is not critical.")
+        print(f"Patient {patient.id} is critical.")
         if state["operating_room_patients"] < state["operating_room_capacity"]:
             # Move to the operating room
             state["operating_room_patients"] += 1
@@ -620,17 +655,12 @@ def icu_done(state, future_event_list, current_time, patient):
                 "is_elective": patient.is_elective,
             })
             state["surgery_list"].sort(key=lambda x: x["time"])
-            print(f"Patient {patient.id} added to surgery queue due to full operating room capacity.")
+            print(f"Patient {patient.id} added to surgery queue due to full operating room capacity.")'''
 
+    # -------------------------------  backward look  -----------------------------
     # Handle ICU queue
-    if state["icu_list"]:
-        next_patient_info = state["icu_list"].pop(0)
-        next_patient = patients[next_patient_info["patient_id"]]
-        next_patient.icu_entry_time = current_time
-        state["icu_patients"] += 1
-        print(f"Processing next patient {next_patient.id} from ICU queue.")
-        S = generate_icu_duration()
-        fel_maker(future_event_list, "icu_done", current_time, S, next_patient)
+    if len(state["icu_list"]) > 0:
+        process_icu(state, future_event_list, current_time, patient)
 
     # Log updated state
     print(f"Updated state after ICU Done event:")
@@ -638,8 +668,62 @@ def icu_done(state, future_event_list, current_time, patient):
           f"Operating Room Patients: {state['operating_room_patients']}, Surgery Queue: {len(state['surgery_list'])}")
 
 
-# ---------------------------------------------   help-functions  -------------------------------------------
+def ccu_done(state, future_event_list, current_time, patient):
+    """
+    Handles the event of a patient completing their CCU stay.
 
+    Args:
+        state (dict): Current state of the hospital.
+        future_event_list (list): Future event list.
+        current_time (float): Current simulation time.
+        patient (Patient): The patient completing their ICU stay.
+    """
+    print(f"\nICU Done event for patient {patient.id} at time {current_time}")
+    patient.ccu_end_time = current_time
+
+    r = random.random()
+    if r < 0.01:
+        pass
+    else:
+        if state["ward_patients"] < state["ward_capacity"]:
+
+            print(f"Patient {patient.id} moved to ward from ccu at time {current_time}.")
+            patient.ward_entry_time = current_time
+            state["ccu_patients"] -= 1
+            state["ward_patients"] += 1
+            S = 60 * exponential(lambd=50)
+            fel_maker(future_event_list, "ward_done", current_time, S, patient)
+        else:
+            state["ward_list"].append({
+                "time": current_time,
+                "patient_id": patient.id,
+                "is_elective": patient.is_elective,
+            })
+            state["ward_list"].sort(key=lambda x: x["time"])
+            print(f"Patient {patient.id} added to ward queue (in icu) due to full ward capacity.")
+    # -------------------------------  backward look  -----------------------------
+    # Handle CCU queue
+    if len(state["ccu_list"]) > 0:
+        process_ccu(state, future_event_list, current_time, patient)
+
+    # Log updated state
+    print(f"Updated state after CCU Done event:")
+    print(f"CCU Patients: {state['ccu_patients']}, Ward Patients: {state['ward_patients']}"
+          , f"Operating Room Patients: {state['operating_room_patients']}, Surgery Queue: {len(state['surgery_list'])}")
+
+
+def ward_done(state, future_event_list, current_time, patient):
+    state['ward_patients'] -= 1
+    state["finished_patients"] += 1
+    patient.exit_time = current_time
+    patient.current_state = "finished"
+    if state["ward_list"]:
+        process_ward(state, future_event_list, current_time, patient)
+    else:
+        pass
+
+
+# ----------------------------------------------  help-functions  -----------------------------------------------
 def process_next_lab_patient(state, future_event_list, current_time, patients):
     """
     Process the next patient from the lab queue and schedule their lab service.
@@ -816,31 +900,42 @@ def process_ward(state, future_event_list, current_time, patient):
     Returns:
         bool: True if patient was transferred to ward, False if added to queue
     """
-    if state["ward_patients"] < state["ward_capacity"]:
-        # Patient goes to the ward
-        state["operating_room_patients"] -= 1  # Decrement operating room count (O--)
-        state["ward_patients"] += 1
-        patient.ward_entry_time = current_time
+    processing_patient = state["ward_list"].pop(0)
+    processing_patient = patients[processing_patient["patient_id"]]
 
-        print(f"Patient {patient.id} moved to ward at time {current_time}")
+    if state["ward_patients"] < state["ward_capacity"]:
+
+        # Patient goes to the ward
+        if processing_patient.current_state == "surgery":
+            state["operating_room_patients"] -= 1  # Decrement operating room count (O--)
+        elif processing_patient.current_state == "icu":
+            state["icu_patients"] -= 1
+        elif processing_patient.current_state == "ccu":
+            state["ccu_patients"] -= 1
+
+        state["ward_patients"] += 1
+        processing_patient.ward_entry_time = current_time
+
+        print(f"Patient {processing_patient.id} moved to ward at time {current_time}")
 
         # Schedule ward completion
         S = 60 * exponential(lambd=50)
-        fel_maker(future_event_list, "ward_done", current_time, S, patient)
+        fel_maker(future_event_list, "ward_done", current_time, S, processing_patient)
 
         # Schedule surgery room to be free
         S = 10
-        fel_maker(future_event_list, "surgery_free", current_time, S, patient)  # Do not use this patient for free
+        fel_maker(future_event_list, "surgery_free", current_time, S, processing_patient)
+        # Do not use this patient for free
 
-    else:
+    '''else:
         # Ward is full; patient waits in the queue
         state["ward_list"].append({
             "time": current_time,
-            "patient_id": patient.id,
-            "is_elective": patient.is_elective,
+            "patient_id": processing_patient.id,
+            "is_elective": processing_patient.is_elective,
         })
         state["ward_list"].sort(key=lambda x: (x['time']))
-        print(f"Patient {patient.id} added to ward queue due to full capacity.")
+        print(f"Patient {processing_patient.id} added to ward queue due to full capacity.")'''
 
 
 def process_icu(state, future_event_list, current_time, patient):
@@ -856,25 +951,28 @@ def process_icu(state, future_event_list, current_time, patient):
     Returns:
         bool: True if patient was transferred to ICU, False if added to queue
     """
+    processing_patient = state["icu_list"].pop(0)
+    processing_patient = patients[processing_patient["patient_id"]]
+
     if state["icu_patients"] < state["icu_capacity"]:
         # Patient goes to the ICU
         state["operating_room_patients"] -= 1  # Decrement operating room count
         state["icu_patients"] += 1
-        patient.icu_entry_time = current_time
+        processing_patient.icu_entry_time = current_time
 
-        print(f"Patient {patient.id} moved to ICU at time {current_time}")
+        print(f"Patient {processing_patient.id} moved to ICU at time {current_time}")
 
         # Schedule ICU completion - using different lambda for ICU stay duration
         S = 60 * exponential(lambd=25)  # Assuming average ICU-stay is 25 hours
-        fel_maker(future_event_list, "icu_done", current_time, S, patient)
+        fel_maker(future_event_list, "icu_done", current_time, S, processing_patient)
 
         # Schedule surgery room to be free
         S = 10
-        fel_maker(future_event_list, "surgery_free", current_time, S, patient)  # Do not use this patient surgery entry
+        fel_maker(future_event_list, "surgery_free", current_time, S, processing_patient)  # Do not use this patient surgery entry
 
         return True
 
-    else:
+    '''else:
         # ICU is full; patient waits in the queue
         state["icu_list"].append({
             "time": current_time,
@@ -884,7 +982,7 @@ def process_icu(state, future_event_list, current_time, patient):
         state["icu_list"].sort(key=lambda x: (x['time']))
         print(f"Patient {patient.id} added to ICU queue due to full capacity.")
 
-        return False
+        return False'''
 
 
 def process_ccu(state, future_event_list, current_time, patient):
@@ -900,25 +998,28 @@ def process_ccu(state, future_event_list, current_time, patient):
     Returns:
         bool: True if patient was transferred to CCU, False if added to queue
     """
+    processing_patient = state["ccu_list"].pop(0)
+    processing_patient = patients[processing_patient["patient_id"]]
+
     if state["ccu_patients"] < state["ccu_capacity"]:
         # Patient goes to the CCU
         state["operating_room_patients"] -= 1  # Decrement operating room count
         state["ccu_patients"] += 1
-        patient.ccu_entry_time = current_time
+        processing_patient.ccu_entry_time = current_time
 
-        print(f"Patient {patient.id} moved to CCU at time {current_time}")
+        print(f"Patient {processing_patient.id} moved to CCU at time {current_time}")
 
         # Schedule CCU completion - using specific lambda for CCU stay duration
         S = 60 * exponential(lambd=25)  # Assuming average CCU stay is 25 hours
-        fel_maker(future_event_list, "ccu_done", current_time, S, patient)
+        fel_maker(future_event_list, "ccu_done", current_time, S, processing_patient)
 
         # Schedule surgery room to be free
         S = 10
-        fel_maker(future_event_list, "surgery_free", current_time, S, patient)  # Do not use this patient for free
+        fel_maker(future_event_list, "surgery_free", current_time, S, processing_patient)  # Do not use this patient for free
 
         return True
 
-    else:
+    '''else:
         # CCU is full; patient waits in the queue
         state["ccu_list"].append({
             "time": current_time,
@@ -928,4 +1029,4 @@ def process_ccu(state, future_event_list, current_time, patient):
         state["ccu_list"].sort(key=lambda x: (x['time']))
         print(f"Patient {patient.id} added to CCU queue due to full capacity.")
 
-        return False
+        return False'''
