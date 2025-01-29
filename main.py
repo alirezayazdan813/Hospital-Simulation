@@ -59,9 +59,11 @@ Date: Winter 2025
 --------------------------------------------------------------------------------
 """
 
+import pandas as pd
 from simulation import starting_state, simulation
 from utils import set_seed
 from analysis import *
+from output import export_patients_to_excel, create_simulation_log
 
 # Initialize the simulation
 state, future_event_list = starting_state()
@@ -71,7 +73,7 @@ set_seed(776)
 
 print('hello')
 
-simulation_time = 60 * 24 * 30
+simulation_time = 60 * 24 * 20
 event_log, patients, table = simulation(simulation_time)
 
 # print(type(event_log))
@@ -91,14 +93,15 @@ print('')
 print('hello again3')
 calculate_kpis(patients)
 
+# ---------------------------------------------------  1  ------------------------------------------------
 print('')
 print('hello-kpi-1')
-
+# ---------------------------------------------------  2  ------------------------------------------------
 print('')
 print('hello-kpi-2')
 emergency_queue_full_probability = calculate_emergency_queue_full_probability(event_log, simulation_time)
 print('emergency_queue_full_probability', ' : ', emergency_queue_full_probability)
-
+# ---------------------------------------------------  3  ------------------------------------------------
 print('')
 print('hello-kpi-3-lab')
 average_queue_length, max_queue_length = calculate_queue_length_stats(event_log, simulation_time, queue_name="lab_list")
@@ -127,27 +130,34 @@ print('max_queue_length_surgery    ', ' : ', max_queue_length)
 average_waiting_time, max_waiting_time = calculate_surgery_waiting_times(patients)
 print('average_waiting_time_surgery', ' : ', average_waiting_time)
 print('max_waiting_time_surgery    ', ' : ', max_waiting_time)
-
+# ---------------------------------------------------  4  ------------------------------------------------
 print('')
 print('hello-kpi-4')
-
+# ---------------------------------------------------  5  ------------------------------------------------
 print('')
 print('hello-kpi-5')
-emergency_utilization = calculate_bed_utilization(patients, simulation_time, bed_capacity=10, section_name="emergency")
-print('emergency_utilization  ', ' : ', emergency_utilization)
-
-lab_utilization = calculate_bed_utilization(patients, simulation_time, bed_capacity=3, section_name="lab")
-print('lab_utilization        ', ' : ', lab_utilization)
-
-pre_surgery_utilization = calculate_bed_utilization(patients,
-                                                    simulation_time, bed_capacity=25, section_name="pre_surgery")
-print('pre_surgery_utilization', ' : ', pre_surgery_utilization)
-
-surgery_utilization = calculate_bed_utilization(patients, simulation_time, bed_capacity=50, section_name="surgery")
-print('surgery_utilization    ', ' : ', surgery_utilization)
-
-icu_utilization = calculate_bed_utilization(patients, simulation_time, bed_capacity=10, section_name="icu")
-print('icu_utilization        ', ' : ', icu_utilization)
+# Define the sections and their configurations
+sections = [
+    {"name": "emergency", "capacity": 10, "display": "emergency_utilization  "},
+    {"name": "lab", "capacity": 3, "display": "lab_utilization        "},
+    {"name": "pre_surgery", "capacity": 25, "display": "pre_surgery_utilization"},
+    {"name": "surgery", "capacity": 50, "display": "surgery_utilization    "},
+    {"name": "icu", "capacity": 10, "display": "icu_utilization        "},
+    {"name": "ward", "capacity": 40, "display": "ward_utilization       "},
+    {"name": "ccu", "capacity": 5, "display": "ccu_utilization        "}
+]
+# Calculate utilization for each section
+for section in sections:
+    utilization = calculate_bed_utilization(
+        patients,
+        simulation_time,
+        bed_capacity=section["capacity"],
+        section_name=section["name"]
+    )
+    print(f'{section["display"]} : {utilization}')
 
 print('bye bye')
 print(len(event_log[-1]["state_snapshot"]["surgery_list"]))
+
+export_patients_to_excel(patients, filename="patients_output.xlsx")
+file_name = create_simulation_log(event_log, simulation_time)

@@ -18,6 +18,7 @@ class Patient:
         self.icu_entry_time = 0
         self.ccu_entry_time = 0
         self.ward_entry_time = 0
+
         self.exit_time = 0
 
         self.emergency_end_time = 0
