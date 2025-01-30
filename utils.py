@@ -86,10 +86,5 @@ def nice_print(current_state, current_event):
           str(current_state['Server Status']).ljust(25)'''
 
 
-mmd = 4
-if mmd == 1:
-    print('hello')
-elif mmd == 2:
-    print('hello2')
-elif mmd == 3:
-    print('hello3')
+for i in range(50):
+    print(discrete_uniform(2, 10))

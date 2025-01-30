@@ -96,43 +96,26 @@ calculate_kpis(patients)
 # ---------------------------------------------------  1  ------------------------------------------------
 print('')
 print('hello-kpi-1')
+mean_time_in_system_elective, counter_elective, mean_time_in_system_emergency, counter_emergency = \
+    calculate_mean_time_in_system(patients)
+print("elective mean time in system  : ", mean_time_in_system_elective/(60*24),
+      f" days for {counter_elective} elective patients")
+print("emergency mean time in system : ", mean_time_in_system_emergency/(60*24),
+      f" days for {counter_emergency} emergency patients")
 # ---------------------------------------------------  2  ------------------------------------------------
 print('')
 print('hello-kpi-2')
 emergency_queue_full_probability = calculate_emergency_queue_full_probability(event_log, simulation_time)
 print('emergency_queue_full_probability', ' : ', emergency_queue_full_probability)
 # ---------------------------------------------------  3  ------------------------------------------------
-print('')
-print('hello-kpi-3-lab')
-average_queue_length, max_queue_length = calculate_queue_length_stats(event_log, simulation_time, queue_name="lab_list")
-print('average_queue_length_lab', ' : ', average_queue_length)
-print('max_queue_length_lab    ', ' : ', max_queue_length)
-average_waiting_time, max_waiting_time = calculate_waiting_times(patients)
-print('average_waiting_time_lab', ' : ', average_waiting_time)
-print('max_waiting_time_lab    ', ' : ', max_waiting_time)
-
-print('')
-print('hello-kpi-3-pre_surgery')
-average_queue_length, max_queue_length = calculate_queue_length_stats(event_log,
-                                                                      simulation_time, queue_name="pre_surgery_list")
-print('average_queue_length_pre_surgery', ' : ', average_queue_length)
-print('max_queue_length_pre_surgery    ', ' : ', max_queue_length)
-average_waiting_time, max_waiting_time = calculate_pre_surgery_waiting_times(patients)
-print('average_waiting_time_pre_surgery', ' : ', average_waiting_time)
-print('max_waiting_time_pre_surgery    ', ' : ', max_waiting_time)
-
-print('')
-print('hello-kpi-3-surgery')
-average_queue_length, max_queue_length = calculate_queue_length_stats(event_log,
-                                                                      simulation_time, queue_name="surgery_list")
-print('average_queue_length_surgery', ' : ', average_queue_length)
-print('max_queue_length_surgery    ', ' : ', max_queue_length)
-average_waiting_time, max_waiting_time = calculate_surgery_waiting_times(patients)
-print('average_waiting_time_surgery', ' : ', average_waiting_time)
-print('max_waiting_time_surgery    ', ' : ', max_waiting_time)
+sections = ['lab', 'pre_surgery', 'surgery', 'icu', 'ward', 'ccu']
+for section in sections:
+    print_section_metrics(event_log, simulation_time, patients, section)
 # ---------------------------------------------------  4  ------------------------------------------------
 print('')
 print('hello-kpi-4')
+print("average re_surgeries for complex surgeries : ", calculate_average_re_surgeries(patients))
+print("total re_surgeries                         : ", calculate_re_surgeries(patients))
 # ---------------------------------------------------  5  ------------------------------------------------
 print('')
 print('hello-kpi-5')
@@ -159,5 +142,5 @@ for section in sections:
 print('bye bye')
 print(len(event_log[-1]["state_snapshot"]["surgery_list"]))
 
-export_patients_to_excel(patients, filename="patients_output.xlsx")
+# export_patients_to_excel(patients, filename="patients_output.xlsx")
 file_name = create_simulation_log(event_log, simulation_time)

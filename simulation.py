@@ -66,13 +66,8 @@ def starting_state():
         'time': 0.1,
         'patient': new_patient  # ???
     })
-    '''
-    # Schedule initial power check
-    future_event_list.append({
-        'event_type': 'Power Outage Check',
-        'time': exponential(1 / 480),  # Mean time of 8 hours
-        'id': ''
-    })'''
+    S = 24 * 60 * discrete_uniform(1, 30)
+    fel_maker(future_event_list, "power_out", 0.1, S, None)
 
     return state, future_event_list
 
@@ -132,15 +127,23 @@ def simulation(simulation_time):
             ccu_done(state, future_event_list, current_time, patient)
         elif current_event['event_type'] == 'ward_done':
             ward_done(state, future_event_list, current_time, patient)
+        elif current_event['event_type'] == 'power_out':
+            power_out(state, future_event_list, current_time)
+        elif current_event['event_type'] == 'power_restore':
+            power_restore(state, future_event_list, current_time)
 
-        # Add other event handlers here (e.g., Lab Free, Operating Room Ready)
+        # checking emergency queue list
+        ''' assert state["emergency_queue"] == len(state["emergency_list"]), \
+            f"Emergency queue mismatch: queue={state['emergency_queue']}, list={len(state['emergency_list'])} " \
+            f"and event type : {current_event['event_type']}"'''
 
         # Log the event
         event_log.append({
             "time": current_time,
             "event_type": current_event['event_type'],
             "patient": current_event.get('patient'),
-            "state_snapshot": copy.deepcopy(state)  # state.copy()
+            "state_snapshot": copy.deepcopy(state),  # state.copy()
+            "future_event_list": copy.deepcopy(future_event_list)
         })
 
         # create a row in the event_log (table)
@@ -180,6 +183,7 @@ def new_arrival(state, future_event_list, current_time):
                 patient_id = len(patients) + 1
                 new_patient = Patient(patient_id, current_time, is_elective=False)
                 patients[patient_id] = new_patient
+                new_patient.arrival_time = current_time
                 # Check if the emergency queue is below capacity
                 if state["emergency_patients"] + state["emergency_patients_entered"] <= state["emergency_capacity"]:
                     state["emergency_patients"] += 1
@@ -218,6 +222,7 @@ def new_arrival(state, future_event_list, current_time):
         patient_id = len(patients) + 1
         new_patient = Patient(patient_id, current_time, is_elective=True)
         patients[patient_id] = new_patient
+        new_patient.arrival_time = current_time
         # Handle normal patients
         if state["pre_surgery_queue"] == 0:
             process_pre_surgery(state, future_event_list, current_time, new_patient)
@@ -274,7 +279,7 @@ def emergency_done(state, future_event_list, current_time, patient):
         patient.surgery_entry_time = current_time
         patient.current_state = "surgery"
         state["emergency_patients"] -= 1
-        print(f"Patient {patient.id} moved to operating room at time {current_time}")
+        print(f"Patient {patient.id} moved to operating room from emergency at time {current_time}")
 
         # Determine surgery type
         r = random.random()
@@ -298,7 +303,7 @@ def emergency_done(state, future_event_list, current_time, patient):
 
     else:
         # If operating room is full, handle patient differently
-        print(f"Operating room is full. Patient {patient.id} added to queue.")
+        print(f"Operating room is full. Patient {patient.id} added to queue wainting in emergency")
         state["surgery_list"].append({
             "time": current_time,
             "is_elective": patient.is_elective,
@@ -308,14 +313,24 @@ def emergency_done(state, future_event_list, current_time, patient):
         state["surgery_list"].sort(key=lambda x: (x['is_elective'], x['time']))
         print(f"surgery_list :  {len(state['surgery_list'])}")
 
-    # ----------------------  Look backward  -----------------------
+    # ----------------------                     Look backward                     -----------------------
     # Check the emergency queue
-    if state["emergency_queue"] > 0:
+    print(state["emergency_queue"], f" : {state['emergency_list']}")
+    if state["emergency_queue"] > 0 and state["emergency_patients"] < state["emergency_capacity"]:
         state["emergency_queue"] -= 1
-        # ???????????????????????   patient   ???????????????????????????????????
-        print(f"Patient dequeued from emergency queue. Remaining: {state['emergency_queue']}.")
-
-        # Handle lab if necessary
+        state["emergency_patients"] += 1
+        first_patient = state["emergency_list"].pop(0)
+        patient = patients[first_patient["patient_id"]]
+        patient.emergency_entry_time = current_time
+        patient.current_state = "emergency"
+        print(f"emergency queue updated. Remaining: {state['pre_surgery_queue']}")
+        print(f"Patient {patient.id} added to lab_list at time {current_time} and going to check lab if is empty")
+        state["lab_list"].append({
+            "time": current_time,
+            "is_elective": False,
+            "patient_id": patient.id
+        })
+        state["lab_list"].sort(key=lambda x: (x['is_elective'], x['time']))
         if state["lab_patients"] < state["lab_capacity"]:
             if state["lab_list"]:
                 state["lab_patients"] += 1
@@ -324,15 +339,7 @@ def emergency_done(state, future_event_list, current_time, patient):
             else:
                 # No patients in the lab queue
                 print(f"Lab free with no patients at {current_time}. Remaining lab patients: {state['lab_patients']}.")
-        else:
-            print(f"Patient {patient.id} added to lab_list at time {current_time}")
-            state["lab_list"].append({
-                "time": current_time,
-                "is_elective": False,
-                "patient_id": patient.id
-            })
-            state["lab_list"].sort(key=lambda x: (x['is_elective'], x['time']))
-
+                print('')
     # Update stats or logs if required
     print(f"Updated state after emergency_done for patient {patient.id}:")
     print(f"Emergency Patients: {state['emergency_patients']},"
@@ -458,16 +465,16 @@ def surgery_free(state, future_event_list, current_time):
         # Where is the patient from
         if patient.current_state == "pre_surgery":
             state["pre_surgery_patients"] -= 1
-
             if len(state["pre_surgery_list"]) > 0:
+                state["pre_surgery_queue"] -= 1
                 pre_surgery_patient = state["pre_surgery_list"].pop(0)
                 patient_id = pre_surgery_patient["patient_id"]
                 afterward_patient = patients[patient_id]
                 process_pre_surgery(state, future_event_list, current_time, afterward_patient)
         elif patient.current_state == "emergency":
             state["emergency_patients"] -= 1
-
             if len(state["emergency_list"]) > 0:
+                state["emergency_queue"] -= 1
                 emergency_patient = state["emergency_list"].pop(0)
                 patient_id = emergency_patient["patient_id"]
                 afterward_patient = patients[patient_id]
@@ -613,7 +620,31 @@ def icu_done(state, future_event_list, current_time, patient):
 
     r = random.random()
     if r < 0.01:
-        pass
+        patient.re_surgeries += 1
+        if state["operating_room_patients"] < state["operating_room_capacity"]:
+            state["operating_room_patients"] += 1
+            state["icu_patients"] -= 1
+            patient.surgery_entry_time = current_time
+            patient.current_state = "surgery"
+            print(f"Patient {patient.id} moved to operating room from icu at time {current_time}")
+
+            # Determine the type of surgery -- hypothesis of that re-surgeries have complex surgery
+            patient.operation_type = "complex"
+            patient.is_elective = False
+            # Schedule the surgery completion event based on operation type
+            S = generate_complex_duration()  # Surgery time for complex operation
+            fel_maker(future_event_list, "surgery_done", current_time, S, patient)
+
+        else:
+            # Operating room is full  --- add to OR list
+            print(f"Operating room is full. Patient {patient.id} added to queue standing in icu")
+            state["surgery_list"].append({
+                "time": current_time,
+                "patient_id": patient.id,
+                "is_elective": False,
+            })
+            state["surgery_list"].sort(key=lambda x: (x['is_elective'], x['time']))
+            print(f"surgery_list :  {len(state['surgery_list'])}")
     else:
         if state["ward_patients"] < state["ward_capacity"]:
 
@@ -696,7 +727,31 @@ def ccu_done(state, future_event_list, current_time, patient):
 
     r = random.random()
     if r < 0.01:
-        pass
+        patient.re_surgeries += 1
+        if state["operating_room_patients"] < state["operating_room_capacity"]:
+            state["operating_room_patients"] += 1
+            state["ccu_patients"] -= 1
+            patient.surgery_entry_time = current_time
+            patient.current_state = "surgery"
+            print(f"Patient {patient.id} moved to operating room from icu at time {current_time}")
+
+            # Determine the type of surgery -- hypothesis of that re-surgeries have complex surgery
+            patient.operation_type = "complex"
+            patient.is_elective = False
+            # Schedule the surgery completion event based on operation type
+            S = generate_complex_duration()  # Surgery time for complex operation
+            fel_maker(future_event_list, "surgery_done", current_time, S, patient)
+
+        else:
+            # Operating room is full  --- add to OR list
+            print(f"Operating room is full. Patient {patient.id} added to queue standing in ccu")
+            state["surgery_list"].append({
+                "time": current_time,
+                "patient_id": patient.id,
+                "is_elective": False,
+            })
+            state["surgery_list"].sort(key=lambda x: (x['is_elective'], x['time']))
+            print(f"surgery_list :  {len(state['surgery_list'])}")
     else:
         if state["ward_patients"] < state["ward_capacity"]:
 
@@ -734,6 +789,28 @@ def ward_done(state, future_event_list, current_time, patient):
         process_ward(state, future_event_list, current_time, patient)
     else:
         pass
+
+
+def power_out(state, future_event_list, current_time):
+    print(f"\nPower outage occurred at time {current_time}")
+    # Set power status to 0 (off)
+    state["power_status"] = 0
+    state["icu_capacity"] = 8
+    state["ccu_capacity"] = 4
+
+    S = 24 * 60
+    fel_maker(future_event_list, "power_restore", current_time, S, None)
+
+
+def power_restore(state, future_event_list, current_time):
+    print(f"\nPower restored at time {current_time}")
+    # Set power status to 1 (on)
+    state["power_status"] = 1
+    state["icu_capacity"] = 10
+    state["ccu_capacity"] = 5
+
+    # S = 24 * 60 * discrete_uniform(1, 30)
+    # fel_maker(future_event_list, "power_out", current_time, S, None)
 
 
 # ----------------------------------------------  help-functions  -----------------------------------------------
@@ -789,7 +866,7 @@ def process_emergency(state, future_event_list, current_time, new_patient):
     patient_id = new_patient.id
 
     # Check if emergency section has capacity
-    if state["emergency_patients"] + 1 <= state["emergency_capacity"]:
+    if state["emergency_patients"] < state["emergency_capacity"]:
         # Admit patient to emergency
         state["emergency_patients"] += 1
         new_patient.emergency_entry_time = current_time

@@ -193,6 +193,7 @@ def create_simulation_log(event_log, simulation_time):
             'CCU_Queue': len(event['state_snapshot']['ccu_list']),
             'Deceased_Patients': event['state_snapshot']['deceased_patients'],
             'Finished_Patients': event['state_snapshot']['finished_patients'],
+            'future_event_list': event['future_event_list'],
         }
         rows.append(row)
         step += 1

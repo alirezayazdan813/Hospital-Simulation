@@ -1,4 +1,4 @@
-# :)
+# calculating kpi's
 def calculate_kpis(patients):
     total_patients = len(patients)
     total_emergency_patients = sum(1 for patient in patients.values() if not patient.is_elective)
@@ -12,6 +12,25 @@ def calculate_kpis(patients):
 
 
 # 1
+def calculate_mean_time_in_system(patients):
+    counter_elective = 0
+    counter_emergency = 0
+    total_time_in_system_elective = 0
+    total_time_in_system_emergency = 0
+    for patient in patients.values():
+        if patient.exit_time != 0:
+            if patient.is_elective:
+                counter_elective += 1
+                total_time_in_system_elective += patient.exit_time - patient.arrival_time
+            else:
+                counter_emergency += 1
+                total_time_in_system_emergency += patient.exit_time - patient.arrival_time
+
+    mean_time_in_system_elective = total_time_in_system_elective / counter_elective
+    mean_time_in_system_emergency = total_time_in_system_emergency / counter_emergency
+
+    return mean_time_in_system_elective, counter_elective, mean_time_in_system_emergency, counter_emergency
+
 
 # 2
 def calculate_emergency_queue_full_probability(event_log, simulation_time):
@@ -179,6 +198,155 @@ def calculate_surgery_waiting_times(patients):
         raise Exception("No patients have completed surgery waiting times calculation.")
 
     return average_waiting_time, max_waiting_time
+
+
+def calculate_icu_waiting_times(patients):
+    """
+    Calculate the average and maximum waiting times for ICU.
+    """
+    total_waiting_time = 0
+    max_waiting_time = 0
+    num_patients = 0
+
+    for patient in patients.values():
+        # Debug printing
+        if patient.icu_entry_time != 0:
+            # print(f"Patient {patient.id} ICU details:")
+            # print(f"  ICU entry time: {patient.icu_entry_time}")
+            # print(f"  Surgery entry time: {patient.surgery_entry_time}")
+            # print(f"  Surgery end time (if exists): {getattr(patient, 'surgery_end_time', 'Not found')}")
+
+            # Calculate waiting time from surgery completion to ICU entry
+            waiting_time = patient.icu_entry_time - patient.surgery_end_time
+            total_waiting_time += waiting_time
+            max_waiting_time = max(max_waiting_time, waiting_time)
+            num_patients += 1
+            # print(f"  Calculated waiting time: {waiting_time}")
+
+    # print(f"Total ICU patients processed: {num_patients}")
+    # print(f"Total ICU waiting time: {total_waiting_time}")
+
+    # Avoid division by zero
+    if num_patients > 0:
+        average_waiting_time = total_waiting_time / num_patients
+    else:
+        print("Warning: No patients found with ICU entries")
+        return 0, 0
+
+    return average_waiting_time, max_waiting_time
+
+
+def calculate_ccu_waiting_times(patients):
+    """
+    Calculate the average and maximum waiting times for CCU.
+
+    Args:
+        patients (dict): Dictionary of Patient objects.
+
+    Returns:
+        tuple: (average_waiting_time, max_waiting_time)
+    """
+    total_waiting_time = 0
+    max_waiting_time = 0
+    num_patients = 0
+
+    for patient in patients.values():
+        # Check if the patient has entered CCU
+        if patient.ccu_entry_time != 0:
+            # Calculate waiting time from surgery end to CCU entry
+            if patient.surgery_end_time != 0:
+                waiting_time = patient.ccu_entry_time - patient.surgery_end_time
+                total_waiting_time += waiting_time
+                max_waiting_time = max(max_waiting_time, waiting_time)
+                num_patients += 1
+
+    # Avoid division by zero
+    if num_patients > 0:
+        average_waiting_time = total_waiting_time / num_patients
+    else:
+        raise Exception("No patients have completed CCU waiting times calculation.")
+
+    return average_waiting_time, max_waiting_time
+
+
+def calculate_ward_waiting_times(patients):
+    """
+    Calculate the average and maximum waiting times for Ward.
+
+    Args:
+        patients (dict): Dictionary of Patient objects.
+
+    Returns:
+        tuple: (average_waiting_time, max_waiting_time)
+    """
+    total_waiting_time = 0
+    max_waiting_time = 0
+    num_patients = 0
+
+    for patient in patients.values():
+        # Check if the patient has entered Ward
+        if patient.ward_entry_time != 0:
+            # Patient could come from either ICU, CCU, or directly from surgery
+            if patient.icu_end_time != 0:  # Coming from ICU
+                waiting_time = patient.ward_entry_time - patient.icu_end_time
+                total_waiting_time += waiting_time
+                max_waiting_time = max(max_waiting_time, waiting_time)
+                num_patients += 1
+            elif patient.ccu_end_time != 0:  # Coming from CCU
+                waiting_time = patient.ward_entry_time - patient.ccu_end_time
+                total_waiting_time += waiting_time
+                max_waiting_time = max(max_waiting_time, waiting_time)
+                num_patients += 1
+            elif patient.surgery_end_time != 0:  # Coming directly from surgery
+                waiting_time = patient.ward_entry_time - patient.surgery_end_time
+                total_waiting_time += waiting_time
+                max_waiting_time = max(max_waiting_time, waiting_time)
+                num_patients += 1
+
+    # Avoid division by zero
+    if num_patients > 0:
+        average_waiting_time = total_waiting_time / num_patients
+    else:
+        raise Exception("No patients have completed Ward waiting times calculation.")
+
+    return average_waiting_time, max_waiting_time
+
+
+def print_section_metrics(event_log, simulation_time, patients, section_name):
+    """
+    Print metrics for a given hospital section
+
+    Args:
+        event_log: Log of events from the simulation
+        simulation_time: Total simulation time
+        patients: Dictionary of patient objects
+        section_name: Name of the section (lab, pre_surgery, surgery, icu, ward, ccu)
+    """
+    # Map section names to their queue list names and waiting time calculation functions
+    waiting_time_functions = {
+        'lab': calculate_waiting_times,
+        'pre_surgery': calculate_pre_surgery_waiting_times,
+        'surgery': calculate_surgery_waiting_times,
+        'icu': calculate_icu_waiting_times,
+        'ward': calculate_ward_waiting_times,
+        'ccu': calculate_ccu_waiting_times
+    }
+
+    print(f'\nkpi-3 Metrics for {section_name.upper()}:')
+
+    # Calculate queue length statistics
+    queue_name = f"{section_name}_list"
+    avg_queue, max_queue = calculate_queue_length_stats(event_log, simulation_time, queue_name)
+
+    # Calculate waiting times
+    waiting_func = waiting_time_functions[section_name]
+    avg_wait, max_wait = waiting_func(patients)
+
+    # Print results in a formatted way
+    print(f'Average Queue Length: {avg_queue:>12.4f}')
+    print(f'Maximum Queue Length: {max_queue:>12.4f}')
+    print(f'Average Wait Time   : {avg_wait:>12.4f}')
+    print(f'Maximum Wait Time   : {max_wait:>12.4f}')
 
 
 # 4
@@ -350,4 +518,11 @@ def calculate_bed_utilization(patients, simulation_time, bed_capacity, section_n
     # Calculate bed utilization
     return (total_bed_time * 100) / (simulation_time * bed_capacity)
 
+
 # 6
+def calculate_re_surgeries(patients):
+    counter = 0
+    for patient in patients.values():
+        counter += patient.re_surgeries
+
+    return counter
