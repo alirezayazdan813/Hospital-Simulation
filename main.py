@@ -18,7 +18,7 @@ Hospital Sections and Capacities:
     1. Pre-surgery Preparation: 25 beds
     2. Emergency Department: 10 beds
     3. Laboratory for Initial Tests: Capacity not limited by beds; depends on testing stations.
-    4. Operating Rooms: 3 rooms
+    4. Operating Rooms: 50 rooms
     5. General Recovery Wards: 40 beds
     6. Specialized Intensive Care Units (ICU): 10 beds
     7. Cardiac Intensive Care Units (CCU): 5 beds
@@ -65,29 +65,21 @@ from utils import set_seed
 from analysis import *
 from output import export_patients_to_excel, create_simulation_log
 
+LAMBDA_VALUE = 1/15
+print('hello')
 # Initialize the simulation
 state, future_event_list = starting_state()
 
 # Set seed for reproducibility
 set_seed(776)
-
-print('hello')
-
-simulation_time = 60 * 24 * 20
+simulation_time = 60 * 24 * 30
 event_log, patients, table = simulation(simulation_time)
 
-# print(type(event_log))
-
-# print('hello again')
 # Print the event log
 '''for event in event_log:
     print('')
     # print(type(event))
     print(f"Time: {event['time']}, Event Type: {event['event_type']}, State Snapshot: {event['state_snapshot']}")'''
-
-# print('')
-# print('hello again2')
-# print_all_patients(patients)
 
 print('')
 print('hello again3')
@@ -110,7 +102,13 @@ print('emergency_queue_full_probability', ' : ', emergency_queue_full_probabilit
 # ---------------------------------------------------  3  ------------------------------------------------
 sections = ['lab', 'pre_surgery', 'surgery', 'icu', 'ward', 'ccu']
 for section in sections:
-    print_section_metrics(event_log, simulation_time, patients, section)
+    avg_queue, max_queue, avg_wait, max_wait = calculate_section_metrics(event_log, simulation_time, patients, section)
+    # Print results in a formatted way
+    print(f'\nkpi-3 Metrics for {section.upper()}:')
+    print(f'Average Queue Length: {avg_queue:>12.4f}')
+    print(f'Maximum Queue Length: {max_queue:>12.4f}')
+    print(f'Average Wait Time   : {avg_wait:>12.4f}')
+    print(f'Maximum Wait Time   : {max_wait:>12.4f}')
 # ---------------------------------------------------  4  ------------------------------------------------
 print('')
 print('hello-kpi-4')
@@ -142,5 +140,5 @@ for section in sections:
 print('bye bye')
 print(len(event_log[-1]["state_snapshot"]["surgery_list"]))
 
-# export_patients_to_excel(patients, filename="patients_output.xlsx")
+export_patients_to_excel(patients, filename="patients_output.xlsx")
 file_name = create_simulation_log(event_log, simulation_time)

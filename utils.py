@@ -25,7 +25,6 @@ def set_seed(seed_value):
     np.random.seed(seed_value)
 
 
-# اگ گفت نمایی با پارامتر فلان دیگ نمیخواد معکوس کنی
 def exponential(lambd):
     """Generate a random number from an exponential distribution."""
     r = random.random()
